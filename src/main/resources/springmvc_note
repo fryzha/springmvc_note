@@ -1,0 +1,395 @@
+WebApplicationContext初始化入口
+org.springframework.web.context.ContextLoader#initWebApplicationContext(ServletContext servletContext)
+{...以后补}
+==========================================================================================
+DispatcherServlet入口：
+FrameworkServlet#processRequest(HttpServletRequest request, HttpServletResponse response)
+{
+    ...
+    {
+        FrameworkServlet#processRequest(HttpServletRequest request, HttpServletResponse response)
+        {
+            ...初始化一些东西
+
+            DispatcherServlet#doService(HttpServletRequest request, HttpServletResponse response)
+            {
+                ...
+
+                给request的attributes添加一些框架对象，让handlers和view可以使用他们
+
+                DispatcherServlet#doDispatch(HttpServletRequest request, HttpServletResponse response)
+                {
+                    获得WebAsyncManager
+
+                    尝试把request解析转换成multipart request{...可能补}
+
+                    获取request对应的HandlerExecutionChain（处理器执行链）
+                    DispatcherServlet#getHandler(HttpServletRequest request)
+                    {
+                        遍历DispatcherServlet.handlerMappings，执行他们的getHandler方法，找到handler便终止循环，返回结果
+                        HandlerMapping#getHandler(HttpServletRequest request)
+                        {
+                            //由于有多种子类实现，在下方写详细过程，可搜索"RequestMappingHandlerMapping的getHandler过程"
+                        }
+
+                        如果这个handler（实际上是HandlerExecutionChain）为null，或者它的handler为null
+                            执行noHandlerFound(processedRequest, response)（返回404）
+                            return
+
+                        //从handlerAdapters获取合适的adapter
+                        DispatcherServlet#getHandlerAdapter(Object handler)
+
+                        处理last-modified，不知道是啥，可能补
+
+                        //执行拦截器PreHandle方法
+                        HandlerExecutionChain.applyPreHandle
+                            (HttpServletRequest request, HttpServletResponse response)
+                        {
+                            获取所有的拦截器，遍历拦截器，执行拦截器的preHandle方法，如果方法返回false，
+                                则已执行的拦截器倒序执行afterCompletion方法，最终返回false
+
+                            如果所有拦截器顺利执行，返回true
+                        }
+
+                        如果applyPreHandle返回false，return
+
+                        HandlerAdapter#handle(HttpServletRequest request, HttpServletResponse response, Object handler)
+                        {
+                            //一般是RequestMappingHandlerAdapter，后面写调用过程
+                        }
+                    }
+
+
+                }
+            }
+        }
+    }
+}
+
+=========================================================================
+RequestMappingHandlerMapping的getHandler过程（继承RequestMappingInfoHandlerMapping,
+                                            RequestMappingInfoHandlerMapping继承AbstractHandlerMapping）
+AbstractHandlerMapping#getHandler(HttpServletRequest request)
+{
+    //获取handler，有不同的实现，这里展示AbstractHandlerMethodMapping的实现
+    AbstractHandlerMethodMapping#getHandlerInternal(HttpServletRequest request)
+    {
+        获取有效的请求路径
+
+        从mappingRegistry属性获取读锁
+
+        获取请求路径对应的HandlerMethod
+        AbstractHandlerMethodMapping#lookupHandlerMethod(String lookupPath, HttpServletRequest request)
+        {
+            从MappingRegistry.urlLookup属性查找对应的RequestMappingInfo集合
+
+            如果集合不为null
+                AbstractHandlerMethodMapping#addMatchingMappings
+                        (Collection<T> mappings, List<Match> matches, HttpServletRequest request)
+                {
+                    遍历mappings
+                    {
+                        执行各种mapping的getMatchingMapping(T mapping, HttpServletRequest request)方法，
+                            进一步判断mapping的信息是否符合request，如果符合就返回一个RequestMappingInfo
+                        {...}
+
+                        如果RequestMappingInfo不为null，把RequestMappingInfo和从MappingRegistry.mappingLookup中
+                            查找mapping对应的HandlerMethod封装成Match添加到matches
+                    }
+                }
+
+            如果matches还是为null
+                从MappingRegistry.mappingLookup的keyset作为mappings执行addMatchingMappings
+
+            如果matches不为空集合
+            {
+                把matches排序，如果matches数量大于1，把第一第二个matches做比较，如果比较结果为相同，则抛出异常
+
+                //解析请求的mediaTypes和路径变量，如/path{xxx},/path?param=1，把各种结果放在request的attributes里
+                //把matches的第一个match的mapping作为参数
+                AbstractHandlerMethodMapping#handleMatch(T mapping, String lookupPath, HttpServletRequest request)
+                {...}
+
+                返回handlerMethod
+            }
+            否则，返回null
+        }
+
+        如果handlerMethod不为null，查看handlerMethod是否已经生成所在类的bean，没有则生成
+
+        返回handlerMethod或null
+
+        最后，释放mappingRegistry的读锁
+    }
+
+    如果handler为null，使用默认的handler，如果默认的handler还是为null，返回null
+
+    如果handler为handlerName，在ApplicationContext获取bean
+
+    //把handler包装成HandlerExecutionChain，并匹配拦截器
+    AbstractHandlerMapping#getHandlerExecutionChain(Object handler, HttpServletRequest request)
+
+    如果是一个CORS请求（用于跨域访问静态资源），则进行相关操作{...}
+
+    返回处理器执行链HandlerExecutionChain
+}
+
+
+==================================================================================================
+RequestMappingHandlerAdapter#handle(HttpServletRequest request, HttpServletResponse response, Object handler)
+{
+    RequestMappingHandlerAdapter#handleInternal(HttpServletRequest request,
+    			HttpServletResponse response, HandlerMethod handlerMethod)
+    {
+        检查request的请求类型是否得到对应方法的支持，是否需要session
+
+        判断是否需要对同一个session加互斥锁
+
+        RequestMappingHandlerAdapter#invokeHandlerMethod(..)
+        {
+            把request和response封装成ServletWebRequest webRequest
+
+            //获取创建DataBinder工厂
+            RequestMappingHandlerAdapter#getDataBinderFactory(HandlerMethod handlerMethod)
+            {
+                获取handlerMethod所在类的类型
+
+                从initBinderCache中根据类型获取对应的methods
+
+                如果methods为空
+                {
+                    methods = MethodIntrospector#selectMethods
+                                    (Class<?> targetType, final ReflectionUtils.MethodFilter methodFilter)
+                    //methodFilter传入的参数为RequestMappingHandlerAdapter.INIT_BINDER_METHODS，
+                    //作用是判断method是否拥有@InitBinder注解
+                    {
+                        //获得重写有@InitBinder注解的泛型方法的方法的桥方法
+                        //    ，和自身带有@InitBinder注解的方法，和被重写方法及往上的方法有@InitBinder注解的重写方法
+                        //    ，和被实现的接口方法上的方法有@InitBinder注解的方法（实现接口的方法）
+                        //！！！注意：如果继承方法或实现方法带有@InitBinder注解，则不记录它们的往上带有@InitBinder注解的方法
+                        MethodIntrospector#selectMethods(Class<?> targetType, final MetadataLookup<T> metadataLookup)
+                        //metadataLookup传入的参数也是一个内部类，实现了inspect(Method method)方法，
+                        //    其中调用了methodFilter#matches(Method method)
+                        {
+                            创建Map<Method, Boolean> methodMap变量，用来保存@InitBinder注解的方法或相关方法（子方法的桥方法），后面调用的方法会通过递归调用使用到这个变量
+
+                            如果targetType不是代理类
+                                把它添加进handlerTypes集合，并把它记录到另一个变量specificHandlerType
+
+                            把handlerType的所有接口添加到handlerTypes
+
+                            遍历handlerTypes
+                            {
+                                如果specificHandlerType不为null，使用它作为targetClass，否则使用当前handlerType
+
+                                ReflectionUtils#doWithMethods(Class<?> clazz, MethodCallback mc, MethodFilter mf)
+                                //传入的mc是一个ReflectionUtils.MethodCallback匿名内部类
+                                {
+                                    获取clazz的所有方法
+                                    ReflectionUtils#getDeclaredMethods(Class<?> clazz){...}
+
+                                    遍历这些方法
+                                    {
+                                        如果该方法是桥方法或者是属于Objcet类的方法
+                                            continue
+
+                                        mc.doWith(Method method)
+                                        {
+                                            //尝试从targetClass寻找最近的可执行（已实现）的method方法（包括桥方法），
+                                            //    没有则返回method本身
+                                            specificMethod = getMostSpecificMethod(Method method, Class<?> targetClass)
+
+                                            //判断specificMethod或从它重写的方法往上找是否拥有@InitBinder注解
+                                            result = metadataLookup.inspect(specificMethod)
+
+                                            若result不为null
+                                            {
+                                                假设specificMethod是一个桥方法，尝试找它的原方法bridgedMethod（注意是bridged）
+
+                                                如果bridgedMethod == specificMethod（说明这不是桥方法）
+                                                    或者bridgedMethod没有@InitBinder注解（说明specificMethod是bridgedMethod
+                                                    的桥方法，bridgedMethod不会覆盖被重写方法method的@InitBinder注解，所以有效）
+                                                {把specificMethod放进methodMap记录下来}
+                                            }
+
+                                        }
+
+                                        如果clazz有父类，使用父类作为clazz，调用ReflectionUtils#doWithMethods(..)
+                                        否则，说明clazz是一个接口，则用它的所有接口分别调用ReflectionUtils#doWithMethods(..)
+                                    }
+                                }
+                            }
+
+                            返回methodMap
+                        }
+                        返回methodMap里的keySet：methods
+                    }
+
+                    //记录handlerType对应的methods到缓存
+                    initBinderCache.put(handlerType, methods)
+                }
+
+                新建List<InvocableHandlerMethod> initBinderMethods
+
+                //处理全局initBinder方法
+                遍历initBinderAdviceCache（类型为Map<ControllerAdviceBean, Set<Method>>，
+                    装的是带有@ControllerAdvice的类，及类中带有@InitBinder注解的方法）
+                {
+                    根据ControllerAdviceBean的@ControllerAdvice注解中的属性判断是否可作用于handlerType
+
+                    如果可以，把ControllerAdviceBean和每一个method分别封装成InvocableHandlerMethod，放进initBinderMethods中
+                }
+
+                把之前拿到的局部@InitBinder的methods也做同样操作，放进initBinderMethods中
+
+                //创建DataBinder工厂并返回
+                createDataBinderFactory(List<InvocableHandlerMethod> binderMethods)
+                                        initBinderMethods
+                {...}
+            }
+
+            //获得Model工厂
+            RequestMappingHandlerAdapter#getModelFactory(HandlerMethod handlerMethod, WebDataBinderFactory binderFactory)
+            {
+                从RequestMappingHandlerAdapter.sessionAttributesHandlerCache获得handlerType对应的
+                    SessionAttributesHandler，没有就创建（创建时会解析handlerMethod所在类或往上的类或接口的@SessionAttributes注解）
+
+                从RequestMappingHandlerAdapter.modelAttributeCache中获取handlerMethod对应类的modelAttribute方法，
+                    没有就用MethodIntrospector#selectMethods(selectMethods(Class<?> targetType, final MetadataLookup<T> metadataLookup))获取并放进缓存
+                    //metadataLookup传入参数为RequestMappingHandlerAdapter.MODEL_ATTRIBUTE_METHODS)
+
+                创建List<InvocableHandlerMethod> attrMethods
+
+                //处理全局modelAttribute方法
+                遍历RequestMappingHandlerAdapter.modelAttributeAdviceCache，类型为Entry<ControllerAdviceBean, Set<Method>>
+                {
+                    根据ControllerAdviceBean的@ControllerAdvice注解中的属性判断是否可作用于handlerType
+
+                    如果可以，把ControllerAdviceBean和每一个method分别封装成InvocableHandlerMethod，放进attrMethods中
+                }
+
+                //处理局部的modelAttribute方法，也同样封装成InvocableHandlerMethod，放进attrMethods中
+
+                return ModelFactory(List<InvocableHandlerMethod> handlerMethods,
+                       			WebDataBinderFactory binderFactory, SessionAttributesHandler attributeHandler)
+                       			   (attrMethods, binderFactory, sessionAttrHandler)
+            }
+
+            把handlerMethod封装成ServletInvocableHandlerMethod invocableMethod
+
+            往invocableMethod里设置各种之后会用到的变量
+
+            //ModelAndViewContainer有两个model,一个是defaultModel，类型为BindingAwareModelMap，
+            //    保存绑定的@modelAttribute注解方法返回的model
+            //    另一个是redirectModel，类型是ModelMap，保存一个redirect里的model
+            新建ModelAndViewContainer mavContainer
+
+            把request的DispatcherServlet.INPUT_FLASH_MAP_ATTRIBUTE放进
+                mavContainer的defaultModel或者redirectModel（类型是ModelMap）
+
+            //初始化Model
+            ModelFactory#initModel(NativeWebRequest request, ModelAndViewContainer container,HandlerMethod handlerMethod)
+            {
+                //获取sessionAttributes
+                ModelFactory.sessionAttributesHandler#retrieveAttributes(WebRequest request)
+
+                把sessionAttributes的放进container的Model中
+
+                //执行ModelFactory存放的@ModelAttribute方法
+                ModelFactory#invokeModelAttributeMethods(NativeWebRequest request, ModelAndViewContainer container)
+                {...}
+
+                //获取handlerMethod带有@SessionAttribute的参数的名字集合
+                ModelFactory#findSessionAttributeArguments(HandlerMethod handlerMethod)
+
+                遍历这些名字，如果container的model中没有这些key，就从request的session中查找，如果找到，就添加到
+                    container的model中，如果没有找到，就抛出异常
+            }
+
+            //设置Redirect时是否忽略DefaultMode
+            mavContainer.setIgnoreDefaultModelOnRedirect(this.ignoreDefaultModelOnRedirect)
+
+            //新建AsyncWebRequest和WebAsyncManager
+            AsyncWebRequest asyncWebRequest = WebAsyncUtils.createAsyncWebRequest(request, response);
+            WebAsyncManager asyncManager = WebAsyncUtils.getAsyncManager(request);
+
+            如果asyncManager.hasConcurrentResult()
+            {...以后补}
+
+
+            ServletInvocableHandlerMethod#invokeAndHandle(ServletWebRequest webRequest, ModelAndViewContainer mavContainer,Object... providedArgs)
+                                                          (webRequest, mavContainer)
+            {
+                //注入方法参数的值并执行方法，执行@ModelAttribute方法和@InitBinder方法时也会调用这个方法
+                ServletInvocableHandlerMethod#invokeForRequest(NativeWebRequest request, ModelAndViewContainer mavContainer, Object... providedArgs)
+                                                              (webRequest, mavContainer, null)
+                {
+                    //解析并获取invocableMethod的参数值
+                    args = InvocableHandlerMethod#getMethodArgumentValues(NativeWebRequest request, ModelAndViewContainer mavContainer,
+                    			Object... providedArgs)
+                    {
+                        获取方法参数的相关信息
+                        MethodParameter[] parameters = InvocableHandlerMethod#getMethodParameters()
+
+                        //新建保存参数值的数组
+                        Object[] args
+
+                        遍历parameters
+                        {
+                            把parameter.parameterNameDiscoverer设置为InvocableHandlerMethod.parameterNameDiscoverer
+
+                            //遍历providedArgs，如果找到和parameterd的参数信息相同类型的值，就返回那个值
+                            args[i] = resolveProvidedArgument(parameter, providedArgs)
+
+                            if (args[i] != null) {
+                                continue;
+                            }
+
+                            如果InvocableHandlerMethod.HandlerMethodArgumentResolverComposite支持解析parameter
+                            //HandlerMethodArgumentResolverComposite#supportsParameter(MethodParameter parameter)
+                            //HandlerMethodArgumentResolverComposite里有argumentResolvers，保存所有的参数解析器，
+                            //    解析器都继承HandlerMethodArgumentResolver接口
+                            //    以及argumentResolverCache，缓存MethodParameter需要使用的解析器
+                            {
+                                args[i] = InvocableHandlerMethod.argumentResolvers#resolveArgument
+                                            (MethodParameter parameter, ModelAndViewContainer mavContainer,
+                                			NativeWebRequest webRequest, WebDataBinderFactory binderFactory)
+                                (parameter, mavContainer, request, 当前执行的InvocableHandlerMethod的dataBinderFactory)
+                                {
+                                    从argumentResolverCache缓存中获取解析器，如果为null，抛出异常
+
+                                    //用解析器解析参数
+                                    HandlerMethodArgumentResolver#resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer,
+                                    			NativeWebRequest webRequest, WebDataBinderFactory binderFactory)
+                                }
+
+                                continue
+                            }
+
+                            如果args[i] == null
+                                抛出异常
+
+
+                        }
+                        返回args
+                    }
+
+                    //先尝试获取InvocableHandlerMethod的被桥方法（当泛型类或接口的@requestMapping方法使用了泛型后，
+                        mapping方法就是一个桥方法；子方法如果带@requestMapping，会覆盖重写方法的注解），再执行方法
+                    Object returnValue = InvocableHandlerMethod#doInvoke(Object... args)
+
+                    返回returnValue
+                }
+            }
+        }
+    }
+}
+
+====================================================================
+//ServletModelAttributeMethodProcessor解析mapping方法中带@ModelAttribute参数的值
+//ServletModelAttributeMethodProcessor继承ModelAttributeMethodProcessor
+ModelAttributeMethodProcessor#resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer,
+			NativeWebRequest webRequest, WebDataBinderFactory binderFactory)
+{...以后补}
+
+====================================================================
