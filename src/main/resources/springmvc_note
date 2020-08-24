@@ -313,7 +313,7 @@ RequestMappingHandlerAdapter#handle(HttpServletRequest request, HttpServletRespo
             AsyncWebRequest asyncWebRequest = WebAsyncUtils.createAsyncWebRequest(request, response);
             WebAsyncManager asyncManager = WebAsyncUtils.getAsyncManager(request);
 
-            如果asyncManager.hasConcurrentResult()
+            ⭐⭐⭐如果asyncManager.hasConcurrentResult()（应该是用来处理异步请求的，一般的请求不会用到）
             {...以后补}
 
 
@@ -345,7 +345,8 @@ RequestMappingHandlerAdapter#handle(HttpServletRequest request, HttpServletRespo
                                 continue;
                             }
 
-                            如果InvocableHandlerMethod.HandlerMethodArgumentResolverComposite支持解析parameter
+                            如果InvocableHandlerMethod.
+                                (HandlerMethodArgumentResolverComposite)argumentResolvers支持解析parameter
                             //HandlerMethodArgumentResolverComposite#supportsParameter(MethodParameter parameter)
                             //HandlerMethodArgumentResolverComposite里有argumentResolvers，保存所有的参数解析器，
                             //    解析器都继承HandlerMethodArgumentResolver接口
@@ -380,6 +381,36 @@ RequestMappingHandlerAdapter#handle(HttpServletRequest request, HttpServletRespo
 
                     返回returnValue
                 }
+
+                //设置response的status，只跟@ResponseStatus注解有关
+                ServletInvocableHandlerMethod#setResponseStatus(ServletWebRequest webRequest)
+
+                根据返回结果，设置ModelAndViewContainer.requestHandled属性，如果为true，直接return
+
+                //选择合适的返回值处理器处理返回值
+                ServletInvocableHandlerMethod.(HandlerMethodReturnValueHandlerComposite)returnValueHandlers
+                    #handleReturnValue(Object returnValue, MethodParameter returnType,
+                                    ModelAndViewContainer mavContainer, NativeWebRequest webRequest)
+                {
+                    //从HandlerMethodReturnValueHandlerComposite.returnValueHandlers集合中选择支持该返回值的handler
+                    HandlerMethodReturnValueHandlerComposite#selectHandler(Object value, MethodParameter returnType)
+
+                    如果没有合适的handler，抛出异常
+
+                    (HandlerMethodReturnValueHandler)handler.handleReturnValue(returnValue, returnType, mavContainer, webRequest)
+                    {⭐⭐⭐...补常用的返回值处理器的handleReturnValue方法}
+                }
+            }
+
+            if (asyncManager.isConcurrentHandlingStarted()) {
+                return null;
+            }
+
+            //获取并返回ModelAndView
+            getModelAndView(ModelAndViewContainer mavContainer,
+                        ModelFactory modelFactory, NativeWebRequest webRequest)
+            {
+                >>>>>>>>>>
             }
         }
     }

@@ -5,6 +5,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.ModelMap;
 import org.springframework.web.bind.WebDataBinder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.support.SessionStatus;
 import org.springframework.web.context.request.WebRequest;
 import part.dao.TestDao;
 
@@ -32,9 +33,11 @@ public class HtmlController implements GenericController<String>{
         map.put("test", new TestDao());
     }
 
-    public String index(TestDao test,
-                        WebRequest request, HttpSession session, ModelMap map, String str){
+    public String index(SessionStatus sessionStatus, TestDao test,
+                        WebRequest request, HttpSession session, ModelMap map, String str)
+            throws Exception {
         request.getParameterMap();
+        sessionStatus.setComplete();
         return "index";
     }
 
