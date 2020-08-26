@@ -37,7 +37,6 @@ public class HtmlController implements GenericController<String>{
                         WebRequest request, HttpSession session, ModelMap map, String str)
             throws Exception {
         request.getParameterMap();
-        sessionStatus.setComplete();
         return "index";
     }
 

@@ -5,64 +5,172 @@ org.springframework.web.context.ContextLoader#initWebApplicationContext(ServletC
 DispatcherServlet入口：
 FrameworkServlet#processRequest(HttpServletRequest request, HttpServletResponse response)
 {
-    ...
+    ...初始化一些东西
+
+    DispatcherServlet#doService(HttpServletRequest request, HttpServletResponse response)
     {
-        FrameworkServlet#processRequest(HttpServletRequest request, HttpServletResponse response)
+        ...
+
+        给request的attributes添加一些框架对象，让handlers和view可以使用他们
+
+        DispatcherServlet#doDispatch(HttpServletRequest request, HttpServletResponse response)
         {
-            ...初始化一些东西
+            获得WebAsyncManager
 
-            DispatcherServlet#doService(HttpServletRequest request, HttpServletResponse response)
+            try
             {
-                ...
+                尝试把request解析转换成multipart request{...可能补}
 
-                给request的attributes添加一些框架对象，让handlers和view可以使用他们
-
-                DispatcherServlet#doDispatch(HttpServletRequest request, HttpServletResponse response)
+                获取request对应的HandlerExecutionChain（处理器执行链）
+                DispatcherServlet#getHandler(HttpServletRequest request)
                 {
-                    获得WebAsyncManager
-
-                    尝试把request解析转换成multipart request{...可能补}
-
-                    获取request对应的HandlerExecutionChain（处理器执行链）
-                    DispatcherServlet#getHandler(HttpServletRequest request)
+                    遍历DispatcherServlet.handlerMappings，执行他们的getHandler方法，找到handler便终止循环，返回结果
+                    HandlerMapping#getHandler(HttpServletRequest request)
                     {
-                        遍历DispatcherServlet.handlerMappings，执行他们的getHandler方法，找到handler便终止循环，返回结果
-                        HandlerMapping#getHandler(HttpServletRequest request)
-                        {
-                            //由于有多种子类实现，在下方写详细过程，可搜索"RequestMappingHandlerMapping的getHandler过程"
-                        }
-
-                        如果这个handler（实际上是HandlerExecutionChain）为null，或者它的handler为null
-                            执行noHandlerFound(processedRequest, response)（返回404）
-                            return
-
-                        //从handlerAdapters获取合适的adapter
-                        DispatcherServlet#getHandlerAdapter(Object handler)
-
-                        处理last-modified，不知道是啥，可能补
-
-                        //执行拦截器PreHandle方法
-                        HandlerExecutionChain.applyPreHandle
-                            (HttpServletRequest request, HttpServletResponse response)
-                        {
-                            获取所有的拦截器，遍历拦截器，执行拦截器的preHandle方法，如果方法返回false，
-                                则已执行的拦截器倒序执行afterCompletion方法，最终返回false
-
-                            如果所有拦截器顺利执行，返回true
-                        }
-
-                        如果applyPreHandle返回false，return
-
-                        HandlerAdapter#handle(HttpServletRequest request, HttpServletResponse response, Object handler)
-                        {
-                            //一般是RequestMappingHandlerAdapter，后面写调用过程
-                        }
+                        //由于有多种子类实现，一般用RequestMappingHandlerMapping查找
+                        //在下方写详细过程，可搜索"RequestMappingHandlerMapping的getHandler过程"
                     }
 
+                    如果这个handler（实际上是HandlerExecutionChain）为null，或者它的handler为null
+                        执行noHandlerFound(processedRequest, response)（返回404）
+                        return
 
+                    //从handlerAdapters获取合适的adapter
+                    DispatcherServlet#getHandlerAdapter(Object handler)
+
+                    处理last-modified，不知道是啥，可能补
+
+                    //执行拦截器PreHandle方法
+                    HandlerExecutionChain.applyPreHandle
+                        (HttpServletRequest request, HttpServletResponse response)
+                    {
+                        获取所有的拦截器，遍历拦截器，执行拦截器的preHandle方法，如果方法返回false，
+                            则已执行的拦截器倒序执行afterCompletion方法，最终返回false
+
+                        如果所有拦截器顺利执行，返回true
+                    }
+
+                    如果applyPreHandle返回false，return
+
+                    HandlerAdapter#handle(HttpServletRequest request, HttpServletResponse response, Object handler)
+                    {
+                        //一般是RequestMappingHandlerAdapter，后面写调用过程，可搜索RequestMappingHandlerAdapter#handle
+                    }
+
+                    if (asyncManager.isConcurrentHandlingStarted()) {
+                        return;
+                    }
+
+                    //如果ModelAndView为null，或没有view，
+                    //用DefaultRequestToViewNameTranslator#getViewName(HttpServletRequest request)
+                    //从url解析出viewName，一般没什么用
+                    DispatcherServlet#applyDefaultViewName(HttpServletRequest request, ModelAndView mv)
+
+                    //获取HandlerExecutionChain的拦截器（interceptorList和interceptors），
+                    //    调用它们的postHandle方法
+                    HandlerExecutionChain#applyPostHandle(HttpServletRequest request, HttpServletResponse response, ModelAndView mv)
+                }
+            }
+            //处理result，处理异常或者渲染视图，执行拦截器
+            DispatcherServlet#processDispatchResult(..)
+            {
+                boolean errorView = false
+
+                如果有异常
+                {
+                    如果是ModelAndViewDefiningException
+                        使用ModelAndViewDefiningException的ModelAndView
+                    否则
+                    {
+                        尝试获取mappedHandler
+
+                        //使用DispatcherServlet#(List<HandlerExceptionResolver>)handlerExceptionResolvers去
+                        //    解析处理异常，返回ModelAndView
+                        DispatcherServlet#processHandlerException(..){...}
+
+                        设置errorView为true
+                    }
+                }
+
+                如果modelAndView不为null（返回json时就为null），并且!modelAndView.wasCleared()（mv没有被清除）
+                {
+                    //渲染视图
+                    DispatcherServlet#render(ModelAndView mv, HttpServletRequest request,
+                                        HttpServletResponse response)
+                    {
+                        //获取国际化信息
+                        DispatcherServlet.(LocaleResolver)localeResolver#resolveLocale(HttpServletRequest request)
+
+                        response.setLocale(locale)
+
+                        如果modelAndView的view是一个String类型
+                        {
+                            //遍历DispatcherServlet.viewResolvers，使用各种ViewResolver#resolveViewName(..)解析view
+                            view = DispatcherServlet#resolveViewName(..)
+
+                            如果view解析不出，抛出异常
+                        }
+                        否则，直接获取view
+
+                        如果modelAndView有status，设置request的status
+
+                        //渲染视图，把返回的页面写进response
+                        View#render(..){...可能补}
+                    }
+
+                    如果errorView为true
+                        清除一些request的attributes
+                }
+
+                if (WebAsyncUtils.getAsyncManager(request).isConcurrentHandlingStarted()) {
+                    return;
+                }
+
+                如果(HandlerExecutionChain)mappedHandler不为null
+                    //获取HandlerExecutionChain的拦截器（interceptorList和interceptors），
+                    //    调用它们的afterCompletion方法
+                    HandlerExecutionChain#triggerAfterCompletion(HttpServletRequest request, HttpServletResponse response, Exception ex)
+                    {...}
+            }
+
+            //可能补
+            finally
+            {
+                if (asyncManager.isConcurrentHandlingStarted()) {
+                    // Instead of postHandle and afterCompletion
+                    //HandlerExecutionChain mappedHandler
+                    if (mappedHandler != null) {
+                        mappedHandler.applyAfterConcurrentHandlingStarted(processedRequest, response);
+                    }
+                }
+                else {
+                    // Clean up any resources used by a multipart request.
+                    if (multipartRequestParsed) {
+                        cleanupMultipart(processedRequest);
+                    }
                 }
             }
         }
+
+        //可能补
+        finally {
+            if (!WebAsyncUtils.getAsyncManager(request).isConcurrentHandlingStarted()) {
+                // Restore the original attribute snapshot, in case of an include.
+                if (attributesSnapshot != null) {
+                    restoreAttributesAfterInclude(request, attributesSnapshot);
+                }
+            }
+        }
+    }
+
+    //可能补
+    finally {
+        resetContextHolders(request, previousLocaleContext, previousAttributes);
+        if (requestAttributes != null) {
+            requestAttributes.requestCompleted();
+        }
+
+        publishRequestHandledEvent(request, response, startTime, failureCause);
     }
 }
 
@@ -138,6 +246,7 @@ AbstractHandlerMapping#getHandler(HttpServletRequest request)
 ==================================================================================================
 RequestMappingHandlerAdapter#handle(HttpServletRequest request, HttpServletResponse response, Object handler)
 {
+    //处理handler，放回modelAndView
     RequestMappingHandlerAdapter#handleInternal(HttpServletRequest request,
     			HttpServletResponse response, HandlerMethod handlerMethod)
     {
@@ -145,7 +254,8 @@ RequestMappingHandlerAdapter#handle(HttpServletRequest request, HttpServletRespo
 
         判断是否需要对同一个session加互斥锁
 
-        RequestMappingHandlerAdapter#invokeHandlerMethod(..)
+        //执行HandlerMethod
+        (ModelAndView)mav = RequestMappingHandlerAdapter#invokeHandlerMethod(..)
         {
             把request和response封装成ServletWebRequest webRequest
 
@@ -252,7 +362,8 @@ RequestMappingHandlerAdapter#handle(HttpServletRequest request, HttpServletRespo
             RequestMappingHandlerAdapter#getModelFactory(HandlerMethod handlerMethod, WebDataBinderFactory binderFactory)
             {
                 从RequestMappingHandlerAdapter.sessionAttributesHandlerCache获得handlerType对应的
-                    SessionAttributesHandler，没有就创建（创建时会解析handlerMethod所在类或往上的类或接口的@SessionAttributes注解）
+                    SessionAttributesHandler，没有就创建（创建时会解析handlerMethod所在类或往上的类或接口的@SessionAttributes注解，
+                    会把handelr上的注解中的names保存到SessionAttributesHandler.knownAttributeNames）
 
                 从RequestMappingHandlerAdapter.modelAttributeCache中获取handlerMethod对应类的modelAttribute方法，
                     没有就用MethodIntrospector#selectMethods(selectMethods(Class<?> targetType, final MetadataLookup<T> metadataLookup))获取并放进缓存
@@ -359,7 +470,7 @@ RequestMappingHandlerAdapter#handle(HttpServletRequest request, HttpServletRespo
                                 {
                                     从argumentResolverCache缓存中获取解析器，如果为null，抛出异常
 
-                                    //用解析器解析参数
+                                    //用解析器解析参数，⭐⭐⭐以后补常用的resolver解析过程
                                     HandlerMethodArgumentResolver#resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer,
                                     			NativeWebRequest webRequest, WebDataBinderFactory binderFactory)
                                 }
@@ -387,7 +498,7 @@ RequestMappingHandlerAdapter#handle(HttpServletRequest request, HttpServletRespo
 
                 根据返回结果，设置ModelAndViewContainer.requestHandled属性，如果为true，直接return
 
-                //选择合适的返回值处理器处理返回值
+                //选择合适的返回值处理器处理返回值，⭐⭐⭐以后补
                 ServletInvocableHandlerMethod.(HandlerMethodReturnValueHandlerComposite)returnValueHandlers
                     #handleReturnValue(Object returnValue, MethodParameter returnType,
                                     ModelAndViewContainer mavContainer, NativeWebRequest webRequest)
@@ -407,12 +518,62 @@ RequestMappingHandlerAdapter#handle(HttpServletRequest request, HttpServletRespo
             }
 
             //获取并返回ModelAndView
-            getModelAndView(ModelAndViewContainer mavContainer,
+            RequestMappingHandlerAdapter#getModelAndView(ModelAndViewContainer mavContainer,
                         ModelFactory modelFactory, NativeWebRequest webRequest)
             {
-                >>>>>>>>>>
+                //更新session和bindingResult
+                ModelFactory#updateModel(NativeWebRequest request, ModelAndViewContainer container)
+                {
+                    获取ModelAndViewContainer.defaultModel
+
+                    如果ModelAndViewContainer.sessionStatus#isComplete()为true（可以在controller的方法中引入SessionStatus参数控制）
+                        根据SessionAttributesHandler中的knownAttributeNames，删除session中的attribute
+                    否则
+                        根据@sessionAttributes从defaultModel中寻找符合名字或类型的modle放在session中
+
+
+                    如果request还没完全处理完成（ModelAndViewContainer#isRequestHandled()==false）
+                                和ModelAndViewContainer使用defaultModel
+                        ModelFactory#updateBindingResult(NativeWebRequest request, ModelMap model)
+                        {
+                            遍历所有的model的keys
+                            {
+                                //判断是否是bindingResult的候选对象，name非以BindingResult.MODEL_KEY_PREFIX前缀开头的变量，
+                                //    并且符合@SessionAttributes的names或者types，或非null，数组，集合，Map，简单的对象类型
+                                如果ModelFactory#isBindingCandidate(name,model.get(name))
+                                {
+                                    通过ModelFactory.(WebDataBinderFactory)dataBinderFactory#createBinder方法生成binder
+
+                                    model保存name为BindingResult.MODEL_KEY_PREFIX + name，
+                                        值为dataBinder.getBindingResult()，类型是BeanPropertyBindingResult
+                                }
+                            }
+                        }
+                }
+
+                if (mavContainer.isRequestHandled()) {
+                    return null;
+                }
+
+                封装ModelAndView(String viewName, Map<String, ?> model, HttpStatus status)
+                               (mavContainer.getViewName(), model, mavContainer.getStatus())
+
+                如果mavContainer的view不是一个viewName，modelAndView设置这个view，代替初始化的viewName
+
+                如果model是RedirectAttributes接口的实现类，把model的flashAttributes放到的原生request的
+                    DispatcherServlet.OUTPUT_FLASH_MAP_ATTRIBUTE属性中
+
+                返回modelAndView
             }
+
+            //最后，做一些request完成的处理
+            ServletWebRequest#requestCompleted()
         }
+
+        如果request的请求头不含"Cache-Control"属性
+            进行一些缓存操作{...以后补}
+
+        返回modelAndView
     }
 }
 
@@ -424,3 +585,11 @@ ModelAttributeMethodProcessor#resolveArgument(MethodParameter parameter, ModelAn
 {...以后补}
 
 ====================================================================
+HandlerMethodArgumentResolver#resolveArgument
+{...补}
+
+====================================================================、
+//补常用的返回值处理器
+HandlerMethodReturnValueHandlerComposite#handleReturnValue(Object returnValue, MethodParameter returnType,
+                                    ModelAndViewContainer mavContainer, NativeWebRequest webRequest)
+{...}
