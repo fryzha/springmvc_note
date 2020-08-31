@@ -7,7 +7,10 @@ import org.springframework.web.bind.WebDataBinder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.bind.support.SessionStatus;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.ModelAndView;
 import part.dao.TestDao;
+import part.entity.TestEntity;
 
 import javax.servlet.http.*;
 import java.text.SimpleDateFormat;
@@ -28,6 +31,11 @@ public class HtmlController implements GenericController<String>{
         binder.registerCustomEditor(TestPropertyEditor.class, new TestPropertyEditor());
     }
 
+    @InitBinder("testEntity")
+    public void initBinderTestEntiry(WebDataBinder binder){
+        binder.setFieldDefaultPrefix("testEntity.");
+    }
+
     @ModelAttribute
     public void getTest(ModelMap map, HttpSession session){
         map.put("test", new TestDao());
@@ -40,8 +48,15 @@ public class HtmlController implements GenericController<String>{
         return "index";
     }
 
+    @RequestMapping("/attr")
+    public ModelAndView attribute(TestEntity testEntity, MultipartFile multipartFile){
+        ModelAndView modelAndView = new ModelAndView("index");
+        modelAndView.addObject("testEntity", testEntity);
+        return modelAndView;
+    }
+
     @RequestMapping("/home/{param}")
-    public String home(){
+    public String home(Integer param){
         return "home";
     }
 

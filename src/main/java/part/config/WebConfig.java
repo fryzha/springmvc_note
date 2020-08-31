@@ -1,6 +1,10 @@
 package part.config;
 
 import org.springframework.context.annotation.*;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.ControllerAdvice;
+import org.springframework.web.multipart.MultipartResolver;
+import org.springframework.web.multipart.commons.CommonsMultipartResolver;
 import org.springframework.web.servlet.ViewResolver;
 import org.springframework.web.servlet.config.annotation.*;
 import org.springframework.web.servlet.view.InternalResourceViewResolver;
@@ -11,7 +15,9 @@ import org.springframework.web.servlet.view.InternalResourceViewResolver;
  */
 @Configuration
 @EnableWebMvc
-@ComponentScan("part.controller")
+@ComponentScan(useDefaultFilters = false, basePackages = "part", includeFilters = {
+        @ComponentScan.Filter(classes = {Controller.class, ControllerAdvice.class})
+})
 public class WebConfig extends WebMvcConfigurerAdapter{
 
     @Bean
@@ -21,6 +27,14 @@ public class WebConfig extends WebMvcConfigurerAdapter{
         resolver.setSuffix(".jsp");
         resolver.setExposeContextBeansAsAttributes(true);
         return resolver;
+    }
+
+    @Bean
+    public MultipartResolver multipartResolver(){
+        CommonsMultipartResolver multipartResolver = new CommonsMultipartResolver();
+        multipartResolver.setMaxUploadSize(100*1024*1024);
+        multipartResolver.setDefaultEncoding("utf-8");
+        return multipartResolver;
     }
 
     @Override

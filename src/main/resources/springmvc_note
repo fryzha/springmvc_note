@@ -19,6 +19,7 @@ FrameworkServlet#processRequest(HttpServletRequest request, HttpServletResponse 
 
             try
             {
+                //需要配置multipartResolver才能解析multipart/form-data的表单
                 尝试把request解析转换成multipart request{...可能补}
 
                 获取request对应的HandlerExecutionChain（处理器执行链）
@@ -214,9 +215,10 @@ AbstractHandlerMapping#getHandler(HttpServletRequest request)
                 把matches排序，如果matches数量大于1，把第一第二个matches做比较，如果比较结果为相同，则抛出异常
 
                 //解析请求的mediaTypes和路径变量，如/path{xxx},/path?param=1，把各种结果放在request的attributes里
+                //  其中HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE保存restful风格的参数（/path{xxx}）
                 //把matches的第一个match的mapping作为参数
-                AbstractHandlerMethodMapping#handleMatch(T mapping, String lookupPath, HttpServletRequest request)
-                {...}
+                RequestMappingInfoHandlerMapping#handleMatch(RequestMappingInfo info, String lookupPath, HttpServletRequest request)
+                {...以后补}
 
                 返回handlerMethod
             }
@@ -259,7 +261,7 @@ RequestMappingHandlerAdapter#handle(HttpServletRequest request, HttpServletRespo
         {
             把request和response封装成ServletWebRequest webRequest
 
-            //获取创建DataBinder工厂
+            //获取创建DataBinder工厂，可以创建binder进行数据绑定
             RequestMappingHandlerAdapter#getDataBinderFactory(HandlerMethod handlerMethod)
             {
                 获取handlerMethod所在类的类型
@@ -578,15 +580,138 @@ RequestMappingHandlerAdapter#handle(HttpServletRequest request, HttpServletRespo
 }
 
 ====================================================================
+HandlerMethodArgumentResolver#resolveArgument:
+
+
 //ServletModelAttributeMethodProcessor解析mapping方法中带@ModelAttribute参数的值
 //ServletModelAttributeMethodProcessor继承ModelAttributeMethodProcessor
 ModelAttributeMethodProcessor#resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer,
 			NativeWebRequest webRequest, WebDataBinderFactory binderFactory)
-{...以后补}
+{
+    //获取参数的名字，一般从@ModelAtrribute注解获取，如果没有注解，由参数的类型返回一个名字
+    ModelFactory.getNameForParameter(MethodParameter parameter)
 
-====================================================================
-HandlerMethodArgumentResolver#resolveArgument
-{...补}
+    从mavContainer的model中获取name的属性，如果不存在就使用ModelAttributeMethodProcessor#createAttribute(..)
+        新建一个对象
+
+    如果mavContainer.bindingDisabledAttributes中没有名为name的属性
+        尝试查找参数@ModelAttribute的binding属性是不是为false，是则添加到bindingDisabledAttributes中
+
+    //新建一个binder
+    //用于参数的数据绑定
+    ServletRequestDataBinderFactory#createBinder(NativeWebRequest webRequest, Object target, String objectName)
+    {
+        新建ExtendedServletRequestDataBinder对象
+
+        用工厂的initializer初始化binder
+
+        执行工厂的binderMethods中适合binder的@InitBinder方法
+    }
+
+    如果binder的target不为null
+    {
+        如果mavContainer.isBindingDisabled中没有这个参数
+            //进行参数数据绑定
+            ModelAttributeMethodProcessor#bindRequestParameters(WebDataBinder binder, NativeWebRequest request)
+            {
+                获取原生request
+
+                ServletRequestDataBinder#bind(ServletRequest request)
+                {
+                    把request的paraments封装成PropertyValue放进MutablePropertyValues mpvs
+
+                    如果是Multipart请求（即Content-Type: multipart/form-data）
+                        把上传的文件也添加到mpvs
+
+                    把request中存放restful参数的HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE属性拿出来
+                        遍历参数，把mpvs没有的参数添加进去
+
+                    //开始数据绑定
+                    WebDataBinder#doBind(MutablePropertyValues mpvs)
+                    {
+                        //检查mpvs中带有binder中fieldDefaultPrefix前缀的参数，把前缀移除，
+                            添加mpvs不存在前缀移除后的key，去掉mpvs所有原来带前缀的key
+                        WebDataBinder#checkFieldDefaults(MutablePropertyValues mpvs)
+                        {
+                            获取fieldDefaultPrefix前缀，如果不为null
+                            {
+                                遍历mpvs的参数
+                                {
+                                    如果带有前缀，把前缀去掉
+
+                                    //获得ConfigurablePropertyAccessor
+                                    //  ConfigurablePropertyAccessor有两种实现：
+                                    //  BeanWrapperImpl：通过getter、setter方法操作属性
+                                    //  DirectFieldAccessor：使用Field直接操作属性
+                                    DataBinder#getPropertyAccessor()
+                                    {
+                                        //从binder中获得bindingResult，没有就创建一个BeanPropertyBindingResult
+                                        DataBinder#getInternalBindingResult(){...}
+
+                                        //返回BeanPropertyBindingResult.beanWrapper，
+                                        //  没有就创建一个BeanWrapperImpl
+                                        BeanPropertyBindingResult#getPropertyAccessor(){...}
+
+                                        返回BeanWrapperImpl
+                                    }
+
+                                    //使用(ConfigurablePropertyAccessor)BeanWrapperImpl判断这个参数是否可写
+                                    ConfigurablePropertyAccessor#isWritableProperty(String propertyName)
+                                    {
+                                        //获取可以操作propertyName最终属性的
+                                        //    AbstractNestablePropertyAccessor$PropertyHandler
+                                        //   （如：people.height.unit，获取unit的handler）
+                                        //    AbstractNestablePropertyAccessor$PropertyHandler有两种实现类：
+                                        //    BeanWrapperImpl$BeanPropertyHandler
+                                        //    DirectFieldAccessor$FieldPropertyHandler
+                                        AbstractNestablePropertyAccessor#
+                                                getPropertyHandler(String propertyName)
+                                        {
+                                            AbstractNestablePropertyAccessor#
+                                                    getPropertyAccessorForPropertyPath(String propertyPath)
+                                            {
+                                                获取propertyPath不在"["和"]"之间的第一个"."的位置
+
+                                                如果存在这个位置
+                                                {
+                                                    获取"."前后的值分别为nestedProperty和nestedPath
+
+                                                    //获取nestedProperty的PropertyAccessor
+                                                    AbstractNestablePropertyAccessor#
+                                                        getNestedPropertyAccessor(String nestedProperty)
+                                                    {
+                                                        //解析nestedProperty成一个PropertyTokenHolder类型
+                                                        //    的tokens
+                                                        //    PropertyTokenHolder有三个属性：
+                                                        //    canonicalName：保存"."前的值（去掉"和'符号）
+                                                        //    actualName：保存canonicalName中"["前的值
+                                                        //    keys：保存canonicalName中"[]"中的值（去掉"和'符号）
+                                                        AbstractNestablePropertyAccessor#
+                                                            getPropertyNameTokens(String propertyName)
+
+
+                                                        >>>>getLocalPropertyHandler(String propertyName)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        检查mpvs中带有binder中fieldMarkerPrefix前缀的参数
+                    }
+                }
+            }
+
+            //进行数据校验
+            ModelAttributeMethodProcessor#validateIfApplicable(WebDataBinder binder, MethodParameter methodParam)
+    }
+
+}
+
+
 
 ====================================================================、
 //补常用的返回值处理器

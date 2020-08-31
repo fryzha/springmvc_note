@@ -7,6 +7,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 
 import javax.sql.DataSource;
@@ -20,7 +22,8 @@ import java.beans.PropertyVetoException;
 @MapperScan("part.mapper")
 @ComponentScan(value = "part",
         excludeFilters =
-                {@ComponentScan.Filter(type = FilterType.ANNOTATION, classes = {EnableWebMvc.class})})
+                {@ComponentScan.Filter(type = FilterType.ANNOTATION, classes = {Controller.class, EnableWebMvc.class,
+                        ControllerAdvice.class})})
 public class RootConfig {
     public RootConfig() {
     }
