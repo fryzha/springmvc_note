@@ -635,78 +635,216 @@ ModelAttributeMethodProcessor#resolveArgument(MethodParameter parameter, ModelAn
                         {
                             获取fieldDefaultPrefix前缀，如果不为null
                             {
-                                遍历mpvs的参数
+                                遍历mpvs的参数PropertyValues
                                 {
-                                    如果带有前缀，把前缀去掉
-
-                                    //获得ConfigurablePropertyAccessor
-                                    //  ConfigurablePropertyAccessor有两种实现：
-                                    //  BeanWrapperImpl：通过getter、setter方法操作属性
-                                    //  DirectFieldAccessor：使用Field直接操作属性
-                                    DataBinder#getPropertyAccessor()
+                                    如果带有前缀
                                     {
-                                        //从binder中获得bindingResult，没有就创建一个BeanPropertyBindingResult
-                                        DataBinder#getInternalBindingResult(){...}
+                                        获取把前缀去掉的PropertyName
 
-                                        //返回BeanPropertyBindingResult.beanWrapper，
-                                        //  没有就创建一个BeanWrapperImpl
-                                        BeanPropertyBindingResult#getPropertyAccessor(){...}
-
-                                        返回BeanWrapperImpl
-                                    }
-
-                                    //使用(ConfigurablePropertyAccessor)BeanWrapperImpl判断这个参数是否可写
-                                    ConfigurablePropertyAccessor#isWritableProperty(String propertyName)
-                                    {
-                                        //获取可以操作propertyName最终属性的
-                                        //    AbstractNestablePropertyAccessor$PropertyHandler
-                                        //   （如：people.height.unit，获取unit的handler）
-                                        //    AbstractNestablePropertyAccessor$PropertyHandler有两种实现类：
-                                        //    BeanWrapperImpl$BeanPropertyHandler
-                                        //    DirectFieldAccessor$FieldPropertyHandler
-                                        AbstractNestablePropertyAccessor#
-                                                getPropertyHandler(String propertyName)
+                                        //获得ConfigurablePropertyAccessor
+                                        //  ConfigurablePropertyAccessor有两种实现：
+                                        //  BeanWrapperImpl：通过getter、setter方法操作属性
+                                        //  DirectFieldAccessor：使用Field直接操作属性
+                                        //  ⭐⭐⭐以下是BeanWrapperImpl实现方式
+                                        DataBinder#getPropertyAccessor()
                                         {
-                                            AbstractNestablePropertyAccessor#
-                                                    getPropertyAccessorForPropertyPath(String propertyPath)
-                                            {
-                                                获取propertyPath不在"["和"]"之间的第一个"."的位置
+                                            //从binder中获得bindingResult，没有就创建一个BeanPropertyBindingResult
+                                            DataBinder#getInternalBindingResult(){...}
 
-                                                如果存在这个位置
-                                                {
-                                                    获取"."前后的值分别为nestedProperty和nestedPath
+                                            //返回BeanPropertyBindingResult.beanWrapper，
+                                            //  没有就创建一个BeanWrapperImpl
+                                            BeanPropertyBindingResult#getPropertyAccessor(){...}
 
-                                                    //获取nestedProperty的PropertyAccessor
-                                                    AbstractNestablePropertyAccessor#
-                                                        getNestedPropertyAccessor(String nestedProperty)
-                                                    {
-                                                        //解析nestedProperty成一个PropertyTokenHolder类型
-                                                        //    的tokens
-                                                        //    PropertyTokenHolder有三个属性：
-                                                        //    canonicalName：保存"."前的值（去掉"和'符号）
-                                                        //    actualName：保存canonicalName中"["前的值
-                                                        //    keys：保存canonicalName中"[]"中的值（去掉"和'符号）
-                                                        AbstractNestablePropertyAccessor#
-                                                            getPropertyNameTokens(String propertyName)
-
-
-                                                        >>>>getLocalPropertyHandler(String propertyName)
-                                                    }
-                                                }
-                                            }
+                                            返回BeanWrapperImpl
                                         }
+
+                                        //使用ConfigurablePropertyAccessor（BeanWrapperImpl）判断这个参数是否可写
+                                        //⭐⭐⭐以下过程为AccessorBeanWrapperImpl实现方式
+                                        ConfigurablePropertyAccessor#isWritableProperty(String propertyName)
+                                        {
+                                            //获取可以操作propertyName最终属性的
+                                            //    AbstractNestablePropertyAccessor$PropertyHandler
+                                            //   （如：people.height.unit，获取unit的handler）
+                                            //    AbstractNestablePropertyAccessor$PropertyHandler有两种实现类：
+                                            //    BeanWrapperImpl$BeanPropertyHandler
+                                            //    DirectFieldAccessor$FieldPropertyHandler
+                                            //    ⭐⭐⭐以下为获取BeanWrapperImpl$BeanPropertyHandler的过程
+                                            AbstractNestablePropertyAccessor#
+                                                    getPropertyHandler(String propertyName)
+                                            {
+                                                AbstractNestablePropertyAccessor#
+                                                        getPropertyAccessorForPropertyPath(String propertyPath)
+                                                {
+                                                    获取propertyPath不在"["和"]"之间的第一个"."的位置
+
+                                                    如果存在这个位置
+                                                    {
+                                                        获取"."前后的值分别为nestedProperty和nestedPath
+
+                                                        //获取nestedProperty的AbstractNestablePropertyAccessor
+                                                        AbstractNestablePropertyAccessor#
+                                                            getNestedPropertyAccessor(String nestedProperty)
+                                                        {
+                                                            //解析nestedProperty成一个PropertyTokenHolder类型
+                                                            //    的tokens
+                                                            //    PropertyTokenHolder有三个属性：
+                                                            //    canonicalName：保存"."前的值（去掉"和'符号）
+                                                            //    actualName：保存canonicalName中"["前的值
+                                                            //    keys：保存canonicalName中"[]"中的值（去掉"和'符号）
+                                                            AbstractNestablePropertyAccessor#
+                                                                getPropertyNameTokens(String propertyName)
+
+                                                            //获取tokens.propertyName对应的值
+                                                            AbstractNestablePropertyAccessor#
+                                                                getPropertyValue(PropertyTokenHolder tokens)
+                                                            {
+                                                                //获取tokens.actualName对应的PropertyHandler
+                                                                AbstractNestablePropertyAccessor#
+                                                                    getLocalPropertyHandler(String propertyName)
+                                                                {
+                                                                    从当前的accessor获取cachedIntrospectionResults，
+                                                                        没有就创建
+
+                                                                    //获取propertyName的GenericTypeAwarePropertyDescriptor
+                                                                    cachedIntrospectionResults.getPropertyDescriptor(propertyName)
+
+                                                                    如果PropertyDescriptor不为null
+                                                                        将PropertyDescriptor封装成BeanPropertyHandler，并返回
+                                                                    否则
+                                                                        返回null
+                                                                }
+
+                                                                如果PropertyHandler为null或者PropertyHandler不可读
+                                                                    抛出异常
+
+                                                                //获取名为tokens.actualName的对象
+                                                                Object value = PropertyHandler#getValue()
+
+                                                                //处理并获取数组或集合的表达式，如：list[0]、map[""]
+                                                                如果tokens.keys不为null
+                                                                {
+                                                                    如果value为null
+                                                                    {
+                                                                        如果AbstractPropertyAccessor.
+                                                                          autoGrowNestedPaths为true（即如果当前
+                                                                          要获取的属性为null，是否创建一个默认的对象）
+                                                                        {
+                                                                            //新建并返回一个名为tokens.actualName的对象
+                                                                            value = AbstractNestablePropertyAccessor#
+                                                                                setDefaultValue(PropertyTokenHolder tokens)
+                                                                            {...以后可能补}
+                                                                        }
+                                                                        否则，抛异常
+                                                                    }
+
+                                                                    根据不同类型，用不同的方式获取value
+                                                                    {...以后可能补}
+                                                                }
+
+                                                                返回value
+                                                            }
+
+                                                            如果value为null或者（value是java.util.Optional类型并且它的value不为null）
+                                                            {
+                                                                如果autoGrowNestedPaths为true
+                                                                    //新建并返回一个对象
+                                                                    value = setDefaultValue(PropertyTokenHolder tokens)
+                                                            }
+
+                                                            从当前的accessor的nestedPropertyAccessors属性
+                                                                中获取名为canonicalName的accessor
+
+                                                            如果accessor为null或者（accessor包装的对象和value
+                                                                或者(java.util.Optional)value包装的对象不相同）
+                                                            {
+                                                                把value封装成AbstractNestablePropertyAccessor（有两种实现类）
+
+                                                                为accessor添加当前accessor的DefaultEditors等相关
+                                                                    对象和CustomEditors
+
+                                                                把这个accessor放进nestedPropertyAccessors
+                                                            }
+
+                                                            返回accessor
+                                                        }
+
+                                                        用返回的nestedProperty的accessor递归调用
+                                                            getPropertyAccessorForPropertyPath(nestedPath)
+                                                            获取下一级nestedPath的accessor并返回
+                                                    }
+
+                                                    否则，返回当前的accessor（即路径最深层的、最终要访问的属性的
+                                                        accessor），结束递归
+                                                }
+
+                                                此时获得最终需要访问的属性的accessor，调用
+                                                    AbstractNestablePropertyAccessor#getLocalPropertyHandler
+                                                    获取属性的handler，返回handler
+                                            }
+
+                                            如果handler不为null
+                                                //返回最终访问的属性是否可写
+                                                return ph.isWritable()
+                                            否则（可能是indexed/mapped属性，暂时没弄明白什么情况下会进入）
+                                            {
+                                                //创建propertyName属性的默认对象
+                                                AbstractNestablePropertyAccessor#getPropertyValue(propertyName)
+
+                                                return true
+                                            }
+
+                                            如果从上面的过程捕获到InvalidPropertyException，不做处理
+
+                                            return false
+                                        }
+
+                                        如果名为propertyName的属性可写并且mpvs并没有这个key
+                                            mpvs添加这个属性
+
+                                        移除mpvs中的未去前缀的PropertyName属性
                                     }
                                 }
                             }
                         }
 
-                        检查mpvs中带有binder中fieldMarkerPrefix前缀的参数
+                        检查mpvs中带有binder中fieldMarkerPrefix前缀的参数（和WebDataBinder#checkFieldDefaults
+                            方法一样，只有前缀不一样）
+
+                        //执行父类的dobind方法
+                        DataBinder#doBind(MutablePropertyValues mpvs)
+                        {
+                            根据DataBinder的allowedFields和disallowedFields（两个属性都可以保存表达式或变量名）,
+                                移除mpvs中的非法变量
+
+                            检查mpvs中是否有DataBinder中requiredFields的变量，如果没有或为空值，使用DateBinder的
+                                bindingErrorProcessor去生成处理一个FieldError
+
+                            //把mpvs的参数绑定到对象的属性中
+                            DataBinder#applyPropertyValues(MutablePropertyValues mpvs)
+                            {...以后补}
+                        }
                     }
                 }
             }
 
-            //进行数据校验
+            //对带@Validated注解的参数进行数据校验
             ModelAttributeMethodProcessor#validateIfApplicable(WebDataBinder binder, MethodParameter methodParam)
+            {...以后可能补}
+
+            如果binder.getBindingResult().hasErrors() && isBindExceptionRequired(binder, parameter)
+                抛出异常
+
+            //从binder中获得包装的对象target和bindingResult
+            binder.getBindingResult().getModel()
+
+            先从mavContainer的ModelMap中移除之前它们的值，再重新添加，先删除保证放在ModelMap的末尾（ModelMap继承了
+                LinkedHashMap，有顺序）
+
+            //如果最终得到的对象和参数类型不符，则进行类型转换，返回转换后的结果
+            return (ExtendedServletRequestDataBinder)binder.convertIfNecessary(binder.getTarget(), parameter.getParameterType(), parameter);
+            {
+                ⭐⭐⭐以后补
+            }
     }
 
 }

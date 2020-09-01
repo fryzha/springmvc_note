@@ -3,6 +3,7 @@ package part.controller;
 import org.springframework.beans.propertyeditors.CustomDateEditor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.ModelMap;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.WebDataBinder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.bind.support.SessionStatus;
@@ -49,7 +50,7 @@ public class HtmlController implements GenericController<String>{
     }
 
     @RequestMapping("/attr")
-    public ModelAndView attribute(TestEntity testEntity, MultipartFile multipartFile){
+    public ModelAndView attribute(@Validated TestEntity testEntity, MultipartFile multipartFile){
         ModelAndView modelAndView = new ModelAndView("index");
         modelAndView.addObject("testEntity", testEntity);
         return modelAndView;
